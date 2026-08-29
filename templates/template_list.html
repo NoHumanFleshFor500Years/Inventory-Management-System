@@ -1,0 +1,71 @@
+<!-- templates/template_list.html -->
+<!-- 属性模板管理页面 -->
+{% extends "base.html" %}
+{% block title %}属性模板管理 - {{ config.SYSTEM_NAME }}{% endblock %}
+{% block content %}
+<div class="phdr">
+    <h2><i class="bi bi-collection"></i> 属性模板管理</h2>
+</div>
+
+<!-- 模板列表 -->
+<div class="ccard mb-4">
+    <div class="card-body">
+        <table class="table tbl">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>模板名称</th>
+                    <th>字段数量</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in templates %}
+                <tr>
+                    <td>{{ t.id }}</td>
+                    <td>{{ t.name }}</td>
+                    <td>{{ t.field_count }}</td>
+                    <td>
+                        <form method="POST" action="/template/delete/{{ t.id }}" style="display:inline" onsubmit="return confirm('确定删除？')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i> 删除
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted">暂无模板</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 新建模板 -->
+<div class="ccard">
+    <div class="card-header"><h5><i class="bi bi-plus-circle"></i> 新建属性模板</h5></div>
+    <div class="card-body">
+        <form method="POST" action="/template/add">
+            <div class="mb-3">
+                <div class="flbl">模板名称 *</div>
+                <input type="text" name="name" class="finp" placeholder="如：手机标准模板、电脑专业模板" required
+               style="min-width:500px">
+            </div>
+            <div class="mb-3">
+                <div class="flbl">字段配置（JSON格式）</div>
+                <textarea name="fields" class="finp" rows="15"
+                    placeholder='[{"key":"serial","label":"序列号"},{"key":"memory","label":"内存容量"},{"key":"storage","label":"存储空间"}]'
+                    required style="font-family:monospace;font-size:15px; min-width:500px"></textarea>
+                <small class="text-muted" style="font-size:11px">格式：[{"key":"字段名","label":"显示名"}, ...]</small>
+            </div>
+            <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> 保存模板</button>
+        </form>
+    </div>
+</div>
+<!-- 返回按钮 -->
+<div class="mt-3">
+    <a href="/" class="btn bm btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回</a>
+</div>
+{% endblock %}

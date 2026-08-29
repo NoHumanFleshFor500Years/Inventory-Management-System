@@ -1,0 +1,67 @@
+<!-- templates/login.html -->
+<!-- 登录页面 - 独立页面，不需要继承 base.html -->
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - {{ config.SYSTEM_NAME }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.min.css">
+    <style>
+        *{font-family:"Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif;margin:0;padding:0;box-sizing:border-box}
+        body{background:#f1f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center}
+        .login-wrap{display:flex;width:860px;max-width:95vw;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.1)}
+        .login-left{flex:1;background:linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%);padding:48px 40px;display:flex;flex-direction:column;justify-content:center;color:#fff}
+        .login-left h2{font-size:22px;font-weight:700;margin-bottom:12px}
+        .login-left p{font-size:13px;opacity:.75;line-height:1.7}
+        .login-left .li{font-size:48px;margin-bottom:20px}
+        .login-right{flex:1;padding:48px 40px;display:flex;flex-direction:column;justify-content:center}
+        .login-right h3{font-size:20px;font-weight:700;color:#1e293b;margin-bottom:6px}
+        .login-right .sub{font-size:13px;color:#94a3b8;margin-bottom:28px}
+        .flbl{font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px}
+        .finp{border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:14px;width:100%;transition:border-color .15s,box-shadow .15s}
+        .finp:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+        .fbtn{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;width:100%;transition:opacity .15s}
+        .fbtn:hover{opacity:.9}
+        @media(max-width:600px){.login-wrap{flex-direction:column;width:95vw}.login-left{padding:28px 20px}.login-right{padding:28px 20px}}
+    </style>
+</head>
+<body>
+    <div class="login-wrap">
+        <div class="login-left">
+            <div class="li"><i class="bi bi-phone"></i></div>
+            <h2>{{ config.SYSTEM_NAME }}</h2>
+            <p>手机库存管理系统<br>高效管理采购、销售、退货与换货全流程</p>
+        </div>
+        <div class="login-right">
+            <h3>欢迎登录</h3>
+            <p class="sub">请输入您的账号信息</p>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} py-2 px-3 mb-3" style="font-size:13px">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <form method="POST" action="/login">
+                <div class="mb-3">
+                    <div class="flbl">用户名</div>
+                    <input type="text" name="username" class="finp" placeholder="请输入用户名" required autofocus>
+                </div>
+                <div class="mb-3">
+                    <div class="flbl">密码</div>
+                    <input type="password" name="password" class="finp" placeholder="请输入密码" required>
+                </div>
+                <div class="mb-3 form-check">
+                    <input type="checkbox" name="remember" class="form-check-input" id="remember">
+                    <label class="form-check-label" for="remember" style="font-size:13px">记住我（7天免登录）</label>
+                </div>
+                <button type="submit" class="fbtn"><i class="bi bi-box-arrow-in-right"></i> 登 录</button>
+            </form>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

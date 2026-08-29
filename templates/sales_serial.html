@@ -1,0 +1,499 @@
+<!-- templates/sales_serial.html -->
+<!-- 销售页面 - 支持选择具体序列号 -->
+{% extends "base.html" %}
+{% block title %}销售开单 - {{ config.SYSTEM_NAME }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <form method="GET" class="d-flex gap-2">
+            <input type="text" name="keyword" class="form-control"
+                   placeholder="搜索商品名称/品牌/货号..." value="{{ request.args.get('keyword', '') }}">
+            <select name="category" class="form-select" style="width: 150px;">
+                <option value="">全部类别</option>
+                {% for cat in categories %}
+                <option value="{{ cat.slug }}" {% if request.args.get('category') == cat.slug %}selected{% endif %}>
+                    {{ cat.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">搜索</button>
+            <a href="/sales" class="btn btn-secondary">重置</a>
+        </form>
+    </div>
+    <div class="col-md-4 text-end">
+        <!--<a href="/sales/my" class="btn btn-outline-info">📋 我的销售记录</a>
+        <a href="/sales" class="btn btn-outline-secondary">快速销售</a>-->
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-success text-white">
+        📦 选择商品进行销售（可勾选具体序列号）
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <small>💡 提示：点击商品名称可查看该商品的所有序列号，勾选后要销售的序列号后提交</small>
+        </div>
+
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>商品名称</th>
+                    <th>品牌</th>
+                    <th>货号</th>
+                    <th>类别</th>
+                    <th>库存</th>
+                    <th>售价</th>
+                    <th>可用序列号</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td><strong>{{ product.name }}</strong></td>
+                    <td>{{ product.brand }}</td>
+                    <td><code>{{ product.sku }}</code></td>
+                    <td><span class="badge bg-secondary">{{ category_map.get(product.category, product.category) }}</span></td>
+                    <td>
+                        {% if product.stock == 0 %}
+                            <span class="badge bg-danger">缺货</span>
+                        {% elif product.stock < 5 %}
+                            <span class="badge bg-warning text-dark">低库存 {{ product.stock }}</span>
+                        {% else %}
+                            <span class="badge bg-success">{{ product.stock }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ "%.2f"|format(product.sell_price) }} 元</td>
+                    <td>
+                        {% if product.available_serials %}
+                            <button class="btn btn-sm btn-outline-primary"
+                                    onclick="toggleSerials({{ product.id }})">
+                                查看序列号
+                            </button>
+                            <div id="serials-{{ product.id }}" class="mt-2" style="display:none;">
+                                {% for sn in product.available_serials %}
+                                <span class="badge bg-secondary me-1 mb-1">{{ sn }}</span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <span class="text-muted">无序列号</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-success"
+                                onclick="openSellModal({{ product.id }}, '{{ product.name }}', {{ product.sell_price }}, {{ product.stock }})">
+                            🛒 销售
+                        </button>
+                        <button class="btn btn-sm btn-warning"
+                                onclick="openReturnModal({{ product.id }}, '{{ product.name }}', {{ product.sell_price }})">
+                            📤 退货
+                        </button>
+                        <button class="btn btn-sm btn-info" onclick="openExchangeModal({{ product.id }})">
+                            🔄 换货
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted">暂无商品数据</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 销售弹窗 -->
+<div class="modal fade" id="sellModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">🛒 销售出库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/sales/add">
+                    <input type="hidden" name="product_id" id="sell_product_id">
+
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="sell_product_name" class="form-control" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">当前库存</label>
+                        <input type="text" id="sell_stock" class="form-control" readonly>
+                    </div>
+
+                    <!-- ── 新增：序列号选择区域 ── -->
+                    <div class="mb-3">
+                        <label class="form-label">选择序列号（可多选）</label>
+                        <div id="sell_serial_select" class="border rounded p-2" style="min-height: 80px; max-height: 150px; overflow-y: auto;">
+                            <div class="text-muted small">请先点击商品列表中的"查看序列号"按钮</div>
+                        </div>
+                        <input type="hidden" name="serial_numbers" id="sell_serial_input">
+                        <small class="text-muted">不选择则自动分配最新序列号</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">销售数量 *</label>
+                        <input type="number" name="quantity" id="sell_quantity" class="form-control" min="1" value="1" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">销售单价（元）*</label>
+                        <input type="number" step="0.01" name="unit_price" id="sell_unit_price" class="form-control" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">客户名称</label>
+                        <input type="text" name="customer" class="form-control" placeholder="留空则为散客">
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100">确认销售</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ 退货弹窗 ═══ -->
+<div class="modal fade" id="returnModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">📤 退货</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/return/submit">
+                    <input type="hidden" name="product_id" id="return_product_id">
+
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="return_product_name" class="form-control" readonly>
+                    </div>
+
+                    <!-- ── 已销售的序列号（从历史销售记录读取）── -->
+                    <div class="mb-3">
+                        <label class="form-label">选择要退货的序列号 *</label>
+                        <div id="return_serial_select" class="border rounded p-2" style="min-height: 60px; max-height: 150px; overflow-y: auto;">
+                            <div class="text-muted small">加载中...</div>
+                        </div>
+                        <input type="hidden" name="serial_numbers" id="return_serial_input">
+                        <small class="text-muted">只能退已销售出去的序列号</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">退货数量 *</label>
+                        <input type="number" name="quantity" id="return_quantity" class="form-control" min="1" value="1" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">退货金额（元）*</label>
+                        <input type="number" step="0.01" name="refund_amount" id="return_refund_amount" class="form-control" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">退货原因</label>
+                        <textarea name="reason" class="form-control" rows="2" placeholder="可选填"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-warning w-100">确认退货</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ 换货弹窗 ═══ -->
+<div class="modal fade" id="exchangeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">🔄 换货</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/exchange/submit">
+                    <input type="hidden" name="old_product_id" id="exchange_old_product_id">
+                    <input type="hidden" name="new_product_id" id="exchange_new_product_id">
+                    <!-- ── 旧商品（要退的）── -->
+                    <div class="mb-3">
+                        <label class="form-label">📥 退回旧商品</label>
+                        <select class="form-select" id="exchange_old_product_select" onchange="loadOldSerials(this.value)">
+                            <option value="">-- 请选择 --</option>
+                            {% for p in products %}
+                            <option value="{{ p.id }}" {% if loop.first %}selected{% endif %}>
+                                {{ p.name }}（库存:{{ p.stock }}）
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- ── 旧序列号 ── -->
+                    <div class="mb-3">
+                        <label class="form-label">退回的旧序列号 *</label>
+                        <div id="exchange_old_serial" class="border rounded p-2" style="min-height:60px;max-height:150px;overflow-y:auto;">
+                            <div class="text-muted small">请先选择退回商品</div>
+                        </div>
+                        <input type="hidden" name="old_serial" id="exchange_old_serial_input">
+                    </div>
+
+                    <hr>
+
+                    <!-- ── 新商品（要换的）── -->
+                    <div class="mb-3">
+                        <label class="form-label">📤 换给顾客的新商品</label>
+                        <select class="form-select" id="exchange_new_product_select" onchange="loadNewSerials(this.value)">
+                            <option value="">-- 请选择 --</option>
+                            {% for p in products %}
+                            <option value="{{ p.id }}">{{ p.name }}（售价:{{ "%.2f"|format(p.sell_price) }}元 库存:{{ p.stock }}）</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- ── 新序列号 ── -->
+                    <div class="mb-3">
+                        <label class="form-label">换给顾客的新序列号 *</label>
+                        <div id="exchange_new_serial" class="border rounded p-2" style="min-height:60px;max-height:150px;overflow-y:auto;">
+                            <div class="text-muted small">请先选择新商品</div>
+                        </div>
+                        <input type="hidden" name="new_serial" id="exchange_new_serial_input">
+                    </div>
+
+                    <!-- ── 差价提示 ── -->
+                    <div id="exchange_price_diff" class="alert alert-info" style="display:none;">
+                        <strong>差价：</strong><span id="price_diff_text"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">换货原因</label>
+                        <textarea name="reason" class="form-control" rows="2" placeholder="可选填"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-info w-100 text-white">确认换货</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 存储每个商品的序列号列表
+const serialData = {{ serial_data | tojson }};
+const productPrices = {{ product_prices | tojson }};
+
+/**
+ * 切换序列号显示/隐藏
+ */
+function toggleSerials(productId) {
+    const div = document.getElementById('serials-' + productId);
+    if (div.style.display === 'none') {
+        div.style.display = 'block';
+    } else {
+        div.style.display = 'none';
+    }
+}
+
+/**
+ * 打开销售弹窗
+ */
+function openSellModal(productId, productName, price, stock) {
+    // 设置基本信息
+    document.getElementById('sell_product_id').value = productId;
+    document.getElementById('sell_product_name').value = productName;
+    document.getElementById('sell_stock').value = stock + ' 件';
+    document.getElementById('sell_unit_price').value = price;
+    document.getElementById('sell_quantity').value = 1;
+    document.getElementById('sell_serial_input').value = '';
+
+    // 显示序列号选择区域
+    const serialDiv = document.getElementById('sell_serial_select');
+    if (serialData[productId] && serialData[productId].length > 0) {
+        serialDiv.innerHTML = '';
+        serialData[productId].forEach(function(sn) {
+            serialDiv.innerHTML += `
+                <div class="form-check">
+                    <input class="form-check-input serial-checkbox" type="checkbox"
+                           name="serial_${sn}" value="${sn}" id="serial_${productId}_${sn}">
+                    <label class="form-check-label" for="serial_${productId}_${sn}">
+                        ${sn}
+                    </label>
+                </div>
+            `;
+        });
+    } else {
+        serialDiv.innerHTML = '<div class="text-muted small">该商品暂无序列号记录</div>';
+    }
+
+    // 显示弹窗
+    new bootstrap.Modal(document.getElementById('sellModal')).show();
+}
+
+/**
+ * 提交表单前，收集选中的序列号
+ */
+document.getElementById('sellModal').addEventListener('shown.bs.modal', function() {
+    // 监听复选框变化
+    document.querySelectorAll('.serial-checkbox').forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            updateSerialInput();
+        });
+    });
+});
+
+function updateSerialInput() {
+    const selected = [];
+    document.querySelectorAll('.serial-checkbox:checked').forEach(function(cb) {
+        selected.push(cb.value);
+    });
+    document.getElementById('sell_serial_input').value = selected.join(',');
+}
+
+// ── 退货弹窗逻辑 ──
+function openReturnModal(productId, productName, price) {
+    document.getElementById('return_product_id').value = productId;
+    document.getElementById('return_product_name').value = productName;
+    document.getElementById('return_refund_amount').value = price;
+    document.getElementById('return_quantity').value = 1;
+    document.getElementById('return_serial_input').value = '';
+
+    // 加载已销售的序列号
+    fetch(`/sales/sold_serials/${productId}`)
+        .then(r => r.json())
+        .then(data => {
+            const div = document.getElementById('return_serial_select');
+            if (data.serials && data.serials.length > 0) {
+                div.innerHTML = '';
+                data.serials.forEach(sn => {
+                    div.innerHTML += `
+                        <div class="form-check">
+                            <input class="form-check-input serial-return-checkbox" type="checkbox"
+                                   value="${sn}" id="ret_${sn}">
+                            <label class="form-check-label" for="ret_${sn}">${sn}</label>
+                        </div>`;
+                });
+                // 添加事件监听，收集选中的序列号
+                div.addEventListener('change', function(e) {
+                    const selected = [];
+                    div.querySelectorAll('.serial-return-checkbox:checked').forEach(cb => {
+                        selected.push(cb.value);
+                    });
+                    document.getElementById('return_serial_input').value = selected.join(',');
+                });
+            } else {
+                div.innerHTML = '<div class="text-danger small">该商品没有已销售的记录，无法退货</div>';
+            }
+        });
+
+    new bootstrap.Modal(document.getElementById('returnModal')).show();
+}
+
+// ── 换货弹窗逻辑 ──
+function openExchangeModal(productId) {
+    document.getElementById('exchange_old_product_id').value = productId;
+    document.getElementById('exchange_old_product_select').value = productId;
+    loadOldSerials(productId);
+    var modal = new bootstrap.Modal(document.getElementById('exchangeModal'));
+    modal.show();
+}
+
+// ── 加载旧商品的可售序列号（已卖出的）──
+function loadOldSerials(productId) {
+    const div = document.getElementById('exchange_old_serial');
+    const hidden = document.getElementById('exchange_old_serial_input');
+    hidden.value = '';
+    if (!productId) {
+        div.innerHTML = '<div class="text-muted small">请先选择退回商品</div>';
+        updatePriceDiff();
+        return;
+    }
+    fetch(`/sales/sold_serials/${productId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.serials && data.serials.length > 0) {
+                div.innerHTML = '';
+                data.serials.forEach(sn => {
+                    div.innerHTML += `
+                        <div class="form-check">
+                            <input class="form-check-input old-sn-radio" type="radio"
+                                   name="old_serial_radio" value="${sn}">
+                            <label class="form-check-label">${sn}</label>
+                        </div>`;
+                });
+                // 绑定点击事件收集值
+                div.addEventListener('click', function(e) {
+                    const radio = e.target.matches('input.old-sn-radio') ? e.target : e.target.closest('input.old-sn-radio');
+                    if (radio && radio.type === 'radio') {
+                        hidden.value = radio.value;
+                        updatePriceDiff();
+                    }
+                });
+            } else {
+                div.innerHTML = '<div class="text-danger small">没有可退的序列号</div>';
+            }
+        });
+}
+
+// ── 加载新商品的可用库存序列号 ──
+function loadNewSerials(productId) {
+    document.getElementById('exchange_new_product_id').value = productId || '';
+    const div = document.getElementById('exchange_new_serial');
+    const hidden = document.getElementById('exchange_new_serial_input');
+    hidden.value = '';
+    if (!productId) {
+        div.innerHTML = '<div class="text-muted small">请先选择新商品</div>';
+        updatePriceDiff();
+        return;
+    }
+    const avail = serialData[productId] || [];
+    if (avail.length > 0) {
+        div.innerHTML = '';
+        avail.forEach(sn => {
+            div.innerHTML += `
+                <div class="form-check">
+                    <input class="form-check-input new-sn-radio" type="radio"
+                           name="new_serial_radio" value="${sn}">
+                    <label class="form-check-label">${sn}</label>
+                </div>`;
+        });
+        div.addEventListener('click', function(e) {
+            const radio = e.target.matches('input.new-sn-radio') ? e.target : e.target.closest('input.new-sn-radio');
+            if (radio && radio.type === 'radio') {
+                hidden.value = radio.value;
+                updatePriceDiff();
+            }
+        });
+    } else {
+        div.innerHTML = '<div class="text-danger small">库存中没有可用序列号</div>';
+    }
+}
+
+// ── 计算差价 ──
+function updatePriceDiff() {
+    const oldId = document.getElementById('exchange_old_product_select').value;
+    const newId = document.getElementById('exchange_new_product_select').value;
+    const diffDiv = document.getElementById('exchange_price_diff');
+    const diffText = document.getElementById('price_diff_text');
+    if (!oldId || !newId) { diffDiv.style.display = 'none'; return; }
+    const oldPrice = productPrices[oldId] || 0;
+    const newPrice = productPrices[newId] || 0;
+    const diff = newPrice - oldPrice;
+    if (diff === 0) {
+        diffDiv.className = 'alert alert-info';
+        diffText.innerHTML = '价格相同，无需补差';
+    } else if (diff > 0) {
+        diffDiv.className = 'alert alert-warning';
+        diffText.innerHTML = `新商品贵 ${diff.toFixed(2)} 元，需补差 <strong>${diff.toFixed(2)} 元</strong>`;
+    } else {
+        diffDiv.className = 'alert alert-success';
+        diffText.innerHTML = `旧商品贵 ${Math.abs(diff).toFixed(2)} 元，退还差价 <strong>${Math.abs(diff).toFixed(2)} 元</strong>`;
+    }
+    diffDiv.style.display = 'block';
+}
+</script>
+{% endblock %}

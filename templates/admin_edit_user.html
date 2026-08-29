@@ -1,0 +1,47 @@
+<!-- templates/admin_edit_user.html -->
+<!-- 编辑用户页面 - 管理员专用 -->
+{% extends "base.html" %}
+
+{% block title %}编辑用户 - {{ config.SYSTEM_NAME }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                ✏️ 编辑用户
+            </div>
+            <div class="card-body">
+                <!-- 显示 Flash 消息 -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <!-- 编辑用户表单 -->
+                <form method="POST" action="/admin/user/{{ user.id }}/edit">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" value="{{ user.username }}" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">当前角色</label>
+                        <select name="role" class="form-select">
+                            <option value="sales" {% if user.role == 'sales' %}selected{% endif %}>销售员</option>
+                            <option value="warehouse" {% if user.role == 'warehouse' %}selected{% endif %}>仓管</option>
+                            <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>管理员</option>
+                        </select>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">保存修改</button>
+                        <a href="/admin/users" class="btn btn-secondary">返回用户列表</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

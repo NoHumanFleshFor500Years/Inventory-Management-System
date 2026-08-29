@@ -1,0 +1,234 @@
+<!-- templates/sales.html -->
+<!-- 销售页面 - 销售员专用 -->
+{% extends "base.html" %}
+{% block title %}销售开单 - {{ config.SYSTEM_NAME }}{% endblock %}
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <form method="GET" class="d-flex gap-2">
+            <input type="text" name="keyword" class="form-control"
+                   placeholder="搜索商品名称/品牌/货号..." value="{{ request.args.get('keyword', '') }}">
+            <select name="category" class="form-select" style="width: 150px;">
+                <option value="">全部类别</option>
+                {% for cat in categories %}
+                <option value="{{ cat.slug }}" {% if request.args.get('category') == cat.slug %}selected{% endif %}>
+                    {{ cat.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">搜索</button>
+            <a href="/sales" class="btn btn-secondary">重置</a>
+        </form>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="/sales/my" class="btn btn-outline-info">📋 我的销售记录</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-success text-white">📦 选择商品进行销售</div>
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>商品名称</th>
+                    <th>类别</th>
+                    <th>库存</th>
+                    <th>售价</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td>{{ product.name }}</td>
+                    <td><span class="badge bg-secondary">{{ category_map.get(product.category, product.category) }}</span></td>
+                    <td>
+                        {% if product.stock == 0 %}
+                            <span class="badge bg-danger">缺货</span>
+                        {% else %}
+                            {{ product.stock }}
+                        {% endif %}
+                    </td>
+                    <td>{{ "%.2f"|format(product.sell_price) }} 元</td>
+                    <td>
+                        <button class="btn btn-sm btn-success"
+                                onclick="quickSell({{ product.id }}, '{{ product.name }}', {{ product.sell_price }}, {{ product.stock }})">
+                            🛒 快速销售
+                        </button>
+                        <button class="btn btn-sm btn-warning"
+                                onclick="openReturnModal({{ product.id }}, '{{ product.name }}', {{ product.sell_price }})">
+                            🔄 退货
+                        </button>
+                        <button class="btn btn-sm btn-info"
+                                onclick="openExchangeModal({{ product.id }}, '{{ product.name }}')">
+                            🔄 换货
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center text-muted">暂无商品数据</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 销售弹窗 -->
+<div class="modal fade" id="salesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">🛒 销售出库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/sales/add">
+                    <input type="hidden" name="product_id" id="sales_product_id">
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="sales_product_name" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">当前库存</label>
+                        <input type="text" id="sales_stock" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">销售数量 *</label>
+                        <input type="number" name="quantity" id="sales_quantity" class="form-control" min="1" value="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">销售单价（元）*</label>
+                        <input type="number" step="0.01" name="unit_price" id="sales_unit_price" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">客户名称</label>
+                        <input type="text" name="customer" class="form-control">
+                    </div>
+                    <div class="alert alert-info">
+                        预计金额：<strong id="sales_total">0.00</strong> 元
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">确认销售</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 退货弹窗 -->
+<div class="modal fade" id="returnModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">🔄 销售退货</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/return/add">
+                    <input type="hidden" name="product_id" id="return_product_id">
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="return_product_name" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">退货数量 *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" value="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">退货原因</label>
+                        <input type="text" name="reason" class="form-control" placeholder="如：客户退货、质量问题等">
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100">确认退货</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 换货弹窗 -->
+<div class="modal fade" id="exchangeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">🔄 商品换货</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/exchange/submit">
+                    <!-- 旧商品（退货） -->
+                    <input type="hidden" name="old_product_id" id="exchange_old_id">
+                    <div class="mb-3">
+                        <label class="form-label">原商品（退货）</label>
+                        <input type="text" id="exchange_old_name" class="form-control" readonly>
+                    </div>
+
+                    <!-- 新商品（换货） -->
+                    <div class="mb-3">
+                        <label class="form-label">新商品（换什么）</label>
+                        <select name="new_product_id" id="exchange_new_id" class="form-select" required>
+                            <option value="">-- 请选择新商品 --</option>
+                            {% for product in products %}
+                            {% if product.id != old_product_id %}
+                            <option value="{{ product.id }}" data-price="{{ product.sell_price }}">
+                                {{ product.name }} (库存: {{ product.stock }})
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- 数量 -->
+                    <div class="mb-3">
+                        <label class="form-label">换货数量 *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" value="1" required>
+                    </div>
+
+                    <!-- 说明 -->
+                    <div class="alert alert-info">
+                        <small>
+                            换货流程：原商品退回仓库 + 新商品发出<br>
+                            差价将在销售记录中体现
+                        </small>
+                    </div>
+
+                    <button type="submit" class="btn btn-info w-100">确认换货</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function quickSell(id, name, price, stock) {
+    document.getElementById('sales_product_id').value = id;
+    document.getElementById('sales_product_name').value = name;
+    document.getElementById('sales_stock').value = stock + ' 件';
+    document.getElementById('sales_quantity').value = 1;
+    document.getElementById('sales_unit_price').value = price;
+    updateTotal();
+    var modal = new bootstrap.Modal(document.getElementById('salesModal'));
+    modal.show();
+}
+document.getElementById('sales_quantity').addEventListener('input', updateTotal);
+document.getElementById('sales_unit_price').addEventListener('input', updateTotal);
+function updateTotal() {
+    var qty = parseInt(document.getElementById('sales_quantity').value) || 0;
+    var price = parseFloat(document.getElementById('sales_unit_price').value) || 0;
+    document.getElementById('sales_total').textContent = (qty * price).toFixed(2);
+}
+function openReturnModal(id, name, price) {
+    document.getElementById('return_product_id').value = id;
+    document.getElementById('return_product_name').value = name;
+    var modal = new bootstrap.Modal(document.getElementById('returnModal'));
+    modal.show();
+}
+function openExchangeModal(id, name) {
+    document.getElementById('exchange_old_id').value = id;
+    document.getElementById('exchange_old_name').value = name;
+    var modal = new bootstrap.Modal(document.getElementById('exchangeModal'));
+    modal.show();
+}
+</script>
+{% endblock %}

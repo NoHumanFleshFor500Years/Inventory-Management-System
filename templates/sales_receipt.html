@@ -1,0 +1,252 @@
+<!-- templates/sales_receipt.html -->
+<!-- 销售小票打印页面 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>销售小票</title>
+    <style>
+        /* ── 打印样式 ── */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #f0f0f0;
+            padding: 20px;
+        }
+
+        /* 小票容器 - 热敏打印机格式（80mm宽） */
+        .receipt {
+            width: 300px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* 针式打印机格式（120mm宽） */
+        .receipt.dot-matrix {
+            width: 450px;
+            font-size: 14px;
+        }
+
+        .receipt-header {
+            text-align: center;
+            border-bottom: 2px dashed #000;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        .receipt-header h2 {
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+
+        .receipt-header p {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .receipt-info {
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .receipt-info div {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .receipt-items {
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            padding: 10px 0;
+            margin-bottom: 10px;
+        }
+
+        .receipt-items table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .receipt-items th {
+            text-align: left;
+            font-size: 11px;
+            padding: 5px 0;
+            border-bottom: 1px solid #000;
+        }
+
+        .receipt-items td {
+            font-size: 11px;
+            padding: 5px 0;
+        }
+
+        .receipt-items .text-right {
+            text-align: right;
+        }
+
+        .receipt-total {
+            text-align: right;
+            margin-bottom: 10px;
+        }
+
+        .receipt-total .amount {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .receipt-footer {
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+            border-top: 1px dashed #000;
+            padding-top: 10px;
+        }
+
+        /* 打印按钮区域 */
+        .print-controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .print-controls button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+        }
+
+        .btn-print {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-close {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-format {
+            background: #2196F3;
+            color: white;
+        }
+
+        /* 打印媒体查询 */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .print-controls {
+                display: none;
+            }
+
+            .receipt {
+                box-shadow: none;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 打印控制按钮 -->
+    <div class="print-controls">
+        <button class="btn-print" onclick="printReceipt()"><i class="bi bi-printer"></i> 打印小票</button>
+        <button class="btn-format" onclick="toggleFormat()"><i class="bi bi-arrow-repeat"></i> 切换格式</button>
+        <button class="btn-close" onclick="window.close()"><i class="bi bi-x-circle"></i> 关闭</button>
+    </div>
+
+    <!-- 小票内容 -->
+    <div class="receipt" id="receipt">
+        <!-- 头部 -->
+        <div class="receipt-header">
+            <h2>{{ config.SYSTEM_NAME }}</h2>
+            <p>销售小票</p>
+            <p>电话：{{ config.SYSTEM_PHONE if config.SYSTEM_PHONE else '暂无' }}</p>
+        </div>
+
+        <!-- 小票信息 -->
+        <div class="receipt-info">
+            <div>
+                <span>单号：</span>
+                <span>{{ sale.id }}</span>
+            </div>
+            <div>
+                <span>日期：</span>
+                <span>{{ sale.sales_date.strftime('%Y-%m-%d %H:%M') if sale.sales_date else '未知' }}</span>
+            </div>
+            <div>
+                <span>销售员：</span>
+                <span>{{ current_user.username }}</span>
+            </div>
+            {% if sale.customer %}
+            <div>
+                <span>客户：</span>
+                <span>{{ sale.customer }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 商品明细 -->
+        <div class="receipt-items">
+            <table>
+                <thead>
+                    <tr>
+                        <th>商品</th>
+                        <th class="text-right">数量</th>
+                        <th class="text-right">单价</th>
+                        <th class="text-right">金额</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ sale.product.name }}</td>
+                        <td class="text-right">{{ sale.quantity }} 件</td>
+                        <td class="text-right">{{ "%.2f"|format(sale.unit_price) }}</td>
+                        <td class="text-right">{{ "%.2f"|format(sale.total_price) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 合计 -->
+        <div class="receipt-total">
+            <div>合计金额：</div>
+            <div class="amount">{{ "%.2f"|format(sale.total_price) }} 元</div>
+        </div>
+
+        <!-- 底部 -->
+        <div class="receipt-footer">
+            <p>感谢惠顾，欢迎下次光临！</p>
+            <p>本店保留最终解释权</p>
+        </div>
+    </div>
+
+    <script>
+        // 打印功能
+        function printReceipt() {
+            window.print();
+        }
+
+        // 切换格式（热敏 vs 针式）
+        let isDotMatrix = false;
+        function toggleFormat() {
+            const receipt = document.getElementById('receipt');
+            isDotMatrix = !isDotMatrix;
+
+            if (isDotMatrix) {
+                receipt.classList.add('dot-matrix');
+            } else {
+                receipt.classList.remove('dot-matrix');
+            }
+        }
+    </script>
+</body>
+</html>

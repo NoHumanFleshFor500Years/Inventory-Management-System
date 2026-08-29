@@ -1,0 +1,97 @@
+<!-- templates/admin_setup.html -->
+<!-- 管理员设置页面 - 首次创建管理员账号时使用 -->
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <!-- 页面字符编码 -->
+    <meta charset="UTF-8">
+    <!-- 响应式视图配置 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 页面标题 -->
+    <title>设置管理员 - {{ config.SYSTEM_NAME }}</title>
+
+    <!-- 引入 Bootstrap 样式框架（CDN） -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        /* 自定义样式 - 与登录页风格一致 */
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* 设置卡片样式 */
+        .setup-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        /* 设置标题样式 */
+        .setup-title {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        /* 设置图标样式 */
+        .setup-icon {
+            font-size: 50px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- ── 管理员设置卡片 ── -->
+    <div class="setup-card">
+        <!-- 设置图标 -->
+        <div class="setup-icon">⚙️</div>
+        <!-- 设置标题 -->
+        <h2 class="setup-title">设置管理员账号</h2>
+        <p class="text-muted text-center mb-4">这是您第一次使用系统，请创建管理员账号</p>
+
+        <!-- 显示 Flash 消息（设置错误提示） -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <!-- 成功消息显示绿色，错误消息显示红色 -->
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- 设置表单 -->
+        <!-- action 指向 /admin/setup，method 为 POST -->
+        <form method="POST" action="/admin/setup">
+            <!-- 用户名输入框 -->
+            <div class="mb-3">
+                <label class="form-label">用户名</label>
+                <input type="text" name="username" class="form-control"
+                       placeholder="请输入管理员用户名" required autofocus>
+            </div>
+            <!-- 密码输入框 -->
+            <div class="mb-3">
+                <label class="form-label">密码</label>
+                <input type="password" name="password" class="form-control"
+                       placeholder="请输入管理员密码" required>
+            </div>
+            <!-- 确认密码输入框 -->
+            <div class="mb-3">
+                <label class="form-label">确认密码</label>
+                <input type="password" name="confirm_password" class="form-control"
+                       placeholder="请再次输入密码" required>
+            </div>
+            <!-- 提交按钮 -->
+            <button type="submit" class="btn btn-success w-100">创建管理员账号</button>
+        </form>
+    </div>
+
+    <!-- 引入 Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

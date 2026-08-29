@@ -1,0 +1,391 @@
+<!-- templates/product_detail.html -->
+<!-- 商品详情页面 -->
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} - 商品详情{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 左侧：商品基本信息 -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                📦 商品信息
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <th width="30%">商品ID</th>
+                        <td>{{ product.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>商品名称</th>
+                        <td><strong>{{ product.name }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>类别</th>
+                        <td>
+                            <!-- 优先从 category_map 字典里取中文名，找不到就显示原始 slug -->
+                            <span class="badge bg-secondary">
+                                {{ category_map.get(product.category, product.category) }}
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- ── 品牌字段 ── -->
+                    <tr>
+                        <th>品牌</th>
+                        <td>{{ product.brand }}</td>
+                    </tr>
+
+                    <!-- ── 自定义属性区域 ── -->
+                    {% set fields = product.get_all_custom_fields() %}
+                    {% if fields %}
+                    <tr>
+                        <th colspan="2" class="bg-info text-white">📋 自定义属性</th>
+                    </tr>
+                    {% for key, value in fields.items() %}
+                    <tr>
+                        <th>{{ key }}</th>
+                        <td><code>{{ value }}</code></td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                    <tr>
+                        <th>货号（SKU）</th>
+                        <td><code>{{ product.sku }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>当前库存</th>
+                        <td>
+                            {% if product.stock == 0 %}
+                                <span class="badge bg-danger">缺货</span>
+                            {% elif product.stock < 5 %}
+                                <span class="badge bg-warning text-dark">低库存 {{ product.stock }}</span>
+                            {% else %}
+                                <span class="badge bg-success">{{ product.stock }} 件</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if current_user.role in ['admin', 'warehouse'] %}
+                    <tr>
+                        <th>成本价</th>
+                        <td>{{ "%.2f"|format(product.cost_price) }} 元</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th>官方指导价</th>
+                        <td>{{ "%.2f"|format(product.sell_price) }} 元</td>
+                    </tr>
+                    {% if current_user.role in ['admin', 'warehouse'] %}
+                    <tr>
+                        <th>毛利润</th>
+                        <td>
+                            {% set profit = product.sell_price - product.cost_price %}
+                            {% if profit > 0 %}
+                                <span class="text-success">{{ "%.2f"|format(profit) }} 元</span>
+                            {% else %}
+                                <span class="text-danger">暂无利润</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th>创建时间</th>
+                        <td>{{ product.created_at.strftime('%Y-%m-%d %H:%M') if product.created_at else '未知' }}</td>
+                    </tr>
+                </table>
+
+                <!-- 快捷操作按钮 -->
+                <div class="d-grid gap-2 mt-3">
+                    <a href="/" class="btn btn-outline-secondary btn-sm">← 返回商品列表</a>
+                <!-- 入库按钮 --
+                    {% if current_user.role in ['admin', 'warehouse'] %}
+                    <button class="btn btn-outline-primary btn-sm"
+                            data-bs-toggle="modal" data-bs-target="#purchaseModal"
+                            onclick="setPurchaseForm({{ product.id }}, '{{ product.name }}')">
+                        📥 采购入库
+                    </button>
+                    {% endif %}
+                    < !-- 出库按钮 --
+                    {% if current_user.role in ['admin', 'warehouse'] %}
+                    <button class="btn btn-outline-success btn-sm"
+                            data-bs-toggle="modal" data-bs-target="#salesModal"
+                            onclick="setSalesForm({{ product.id }}, '{{ product.name }}')">
+                        📤 销售出库
+                    </button>
+                    {% endif %}
+                    < !-- 退货按钮 --
+                    {% if current_user.role in ['admin', 'warehouse'] %}
+                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#returnModal"
+                            onclick="setReturnForm({{ product.id }}, '{{ product.name }}')">
+                        📤 退货
+                    </button>
+                    {% endif %} -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧：采购记录和销售记录 -->
+
+    <div class="col-md-8">
+        <!-- 采购记录卡片 -->
+        {% if current_user.role in ['admin', 'warehouse'] %}
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <span>📥 采购记录（共 {{ purchases|length }} 条）</span>
+                <span class="badge bg-light text-dark">总入库 {{ total_purchase_qty }} 件</span>
+            </div>
+            <div class="card-body p-0">
+                {% if purchases %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>数量</th>
+                                <th>单价</th>
+                                <th>总价</th>
+                                <th>供应商</th>
+                                <th>序列号</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in purchases %}
+                            <tr>
+                                <td>{{ p.purchase_date.strftime('%Y-%m-%d') if p.purchase_date else '-' }}</td>
+                                <td>{{ p.quantity }}</td>
+                                <td>{{ "%.2f"|format(p.unit_cost) }} 元</td>
+                                <td><strong>{{ "%.2f"|format(p.total_cost) }} 元</strong></td>
+                                <td>{{ p.supplier }}</td>
+                                <td>
+                                    {% if p.serial_list %}
+                                        {% for sn in p.serial_list %}
+                                            <span class="badge bg-secondary me-1">{{ sn }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    暂无采购记录
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 销售记录卡片 -->
+        <div class="card">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span>📤 销售记录（共 {{ sales|length }} 条）</span>
+                <span class="badge bg-light text-dark">总出库 {{ total_sales_qty }} 件</span>
+            </div>
+            <div class="card-body p-0">
+                {% if sales %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>数量</th>
+                                <th>单价</th>
+                                <th>总价</th>
+                                <th>客户/原因</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in sales %}
+                            <tr>
+                                <td>{{ s.sales_date.strftime('%Y-%m-%d') if s.sales_date else '-' }}</td>
+                                <td>{{ s.quantity }}</td>
+                                <td>{{ "%.2f"|format(s.unit_price) }} 元</td>
+                                <td><strong>{{ "%.2f"|format(s.total_price) }} 元</strong></td>
+                                <td>{{ s.customer }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    暂无销售记录
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 采购入库弹窗 -->
+<div class="modal fade" id="purchaseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">采购入库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/purchase/add">
+                    <input type="hidden" name="product_id" id="purchase_product_id">
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="purchase_product_name" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">采购数量 *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">采购单价（元）*</label>
+                        <input type="number" step="0.01" name="unit_cost" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">供应商</label>
+                        <div class="input-group">
+                            <select name="supplier_id" class="form-select">
+                                <option value="">-- 请选择 --</option>
+                                {% for s in suppliers %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addSupplierModal">+ 添加供应商</button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">确认入库</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <!-- ── 添加供应商弹窗 ── -->    <div class="modal fade" id="addSupplierModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新增供应商</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="supplierForm" method="POST" action="/supplier/add">
+                        <div class="mb-3">
+                            <label class="form-label">供应商名称</label>
+                            <input type="text" name="name" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">上级分类（可选）</label>
+                            <select name="parent_id" class="form-select">
+                                <option value="">-- 无（一级分类）--</option>
+                                {% for s in suppliers %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- 销售出库弹窗 -->
+<div class="modal fade" id="salesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">销售出库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/sales/add">
+                    <input type="hidden" name="product_id" id="sales_product_id">
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="sales_product_name" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">销售数量 *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">销售单价（元）</label>
+                        <input type="number" step="0.01" name="unit_price" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">客户名称</label>
+                        <input type="text" name="customer" class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">确认出库</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 退货弹窗 -->
+<div class="modal fade" id="returnModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">商品退货</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/return/submit">
+                    <input type="hidden" name="product_id" id="return_product_id">
+
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="return_product_name" class="form-control" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">退货序列号 *</label>
+                        <input type="text" name="return_serial" class="form-control" placeholder="输入要退货的序列号">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">退货原因</label>
+                        <textarea name="reason" class="form-control" rows="3" placeholder="选填"></textarea>
+                    </div>
+
+                    <!-- 隐藏字段：关联的销售ID -->
+                    <input type="hidden" name="sales_id" id="return_sales_id">
+
+                    <button type="submit" class="btn btn-warning w-100">确认退货</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 设置采购入库表单的默认值
+function setPurchaseForm(id, name) {
+    document.getElementById('purchase_product_id').value = id;
+    document.getElementById('purchase_product_name').value = name;
+}
+
+// 设置销售出库表单的默认值
+function setSalesForm(id, name) {
+    document.getElementById('sales_product_id').value = id;
+    document.getElementById('sales_product_name').value = name;
+}
+
+// 设置退货表单的默认值
+function setReturnForm(productId, productName) {
+    document.getElementById('return_product_id').value = productId;
+    document.getElementById('return_product_name').value = productName;
+}
+</script>
+{% endblock %}
+

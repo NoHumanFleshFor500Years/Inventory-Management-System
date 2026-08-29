@@ -1,0 +1,458 @@
+<!-- templates/index.html -->
+<!-- 首页 - 商品列表页 -->
+{% extends "base.html" %}
+
+{% block title %}商品列表 - {{ config.SYSTEM_NAME }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <!-- ── 搜索和筛选区 ── -->
+    <div class="col-md-8">
+        <form method="GET" class="d-flex gap-2 flex-wrap">
+            <!-- 搜索框 -->
+            <input type="text" name="keyword" class="form-control" style="width:1000px; max-width:100%;" placeholder="搜索商品名称/品牌/货号..." value="{{ request.args.get('keyword', '') }}">
+                        <!-- 类别筛选下拉框（动态从数据库读取） -->
+            <select name="category" class="form-select" style="width: 150px;">
+                <option value="">全部类别</option>
+                <!-- 循环输出所有类别 -->
+                {% for cat in categories %}
+                <option value="{{ cat.slug }}"
+                    {% if request.args.get('category') == cat.slug %}selected{% endif %}>
+                    {{ cat.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <!-- 搜索按钮 -->
+            <button type="submit" class="btn btn-primary">搜索</button>
+            <!-- 重置按钮 -->
+            <a href="/" class="btn btn-secondary">重置</a>
+            <!-- 库存预警筛选按钮 -->
+            <a href="/?low_stock=1" class="btn btn-danger"> ⚠️ 预警商品
+                {% if low_stock_count and low_stock_count > 0 %}
+                    ({{ low_stock_count }})
+                {% endif %}
+            </a>
+        </form>
+    </div>
+
+        <!-- ── 右侧按钮组 ── -->
+    <div class="col-md-4 text-end">
+        <!-- 添加类别按钮 -->
+        {% if current_user.role == 'admin' %}
+        {% endif %}
+        <!-- 添加商品按钮 -->
+        {% if current_user.role in ['admin', 'warehouse'] %}
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addProductModal">
+            ➕ 添加商品
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ── 添加类别弹窗 ── -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加新类别</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/category/add">
+                    <div class="mb-3">
+                        <label class="form-label">类别名称（中文）*</label>
+                        <input type="text" name="name" class="form-control" placeholder="如：CPU、硬盘、DIY配件" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">类别标识（英文，可不填）</label>
+                        <input type="text" name="slug" class="form-control" placeholder="如：cpu、hard_drive（自动生成）">
+                        <small class="text-muted">留空会自动用中文转小写生成</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">确认添加</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── 商品表格 ── -->
+<div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-3">
+    {% for product in products %}
+    <div class="col">
+        <div class="pcard h-100">
+            <div class="card-header">
+                <div class="pn">{{ product.name }}</div>
+                <div class="psku">SKU: {{ product.sku }}</div>
+            </div>
+            <div class="card-body">
+                <div class="prow"><span>类别</span><span>{{ category_map.get(product.category, product.category) }}</span></div>
+                <div class="prow"><span>品牌</span><span>{{ product.brand }}</span></div>
+                <div class="prow"><span>库存</span>
+                    {% if product.stock == 0 %}<span class="badge bout">缺货</span>
+                    {% elif product.stock < 5 %}<span class="badge bowl">低库存 {{ product.stock }}</span>
+                    {% else %}<span class="badge bodk">{{ product.stock }}</span>{% endif %}
+                </div>
+                {% if current_user.role in ['admin','warehouse'] %}
+                <div class="prow"><span>成本价</span><span>{{ "%.2f"|format(product.cost_price) }} 元</span></div>
+                {% endif %}
+                <div class="prow"><span>官方指导价</span><span>{{ "%.2f"|format(product.sell_price) }} 元</span></div>
+            </div>
+            <div class="card-footer">
+                <a href="/product/{{ product.id }}" class="btn bm btn-outline-info"><i class="bi bi-eye"></i> 详情</a>
+                {% if current_user.role in ['warehouse','admin'] %}
+                <button class="btn bm btn-outline-primary" onclick="setPurchaseForm({{ product.id }}, '{{ product.name }}')"><i class="bi bi-box-arrow-in-down"></i> 入库</button>
+                <button class="btn bm btn-outline-success" onclick="setSalesForm({{ product.id }}, '{{ product.name }}')"><i class="bi bi-box-arrow-up"></i> 出库</button>
+                {% endif %}
+                {% if current_user.role == 'admin' %}
+                <button class="btn bm btn-outline-danger" onclick="deleteProduct({{ product.id }}, '{{ product.name }}')"><i class="bi bi-trash"></i> 删除</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- ── 添加商品弹窗 ── -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加新商品</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/product/add">
+                    <div class="mb-3">
+                        <label class="form-label">商品名称 *</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">类别 *</label>
+                        <div class="input-group">
+                        <select name="category" class="form-select" required>
+                            <option value="">-- 请选择类别 --</option>
+                            <!-- 从数据库动态循环输出所有类别 -->
+                            {% for cat in categories %}
+                            <option value="{{ cat.slug }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-outline-info me-2" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                                + 添加类别
+                            </button>
+                    </div></div>
+                    <div class="mb-3">
+                        <label class="form-label">属性模板</label>
+                        <select class="form-select" id="templateSelect" onchange="loadTemplate()">
+                            <option value="">-- 不选择模板 --</option>
+                            {% for t in templates %}
+                            <option value="{{ t.id }}">{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">选择模板后会自动生成对应的输入框</small>
+                    </div>
+
+                    <!-- 动态属性字段容器 -->
+                    <div id="templateFields" style="display:none; border-top:1px dashed #ccc; padding-top:10px; margin-top:10px;">
+                        <!-- 这里会动态插入模板字段 -->
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">品牌 *</label>
+                        <div class="input-group">
+                            <select name="brand_id" class="form-select" required>
+                                <option value="">-- 请选择品牌 --</option>
+                                {% for b in brands %}
+                                <option value="{{ b.id }}">{{ b.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#addBrandModal">
+                                + 添加品牌
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">货号（SKU）*</label>
+                        <input type="text" name="sku" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        {% if current_user.role in ['admin', 'warehouse'] %}
+                        <label class="form-label">成本价（元）</label>
+                        <input type="number" step="0.01" name="cost_price" class="form-control" value="0">
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">官方指导价（元）</label>
+                        <input type="number" step="0.01" name="sell_price" class="form-control" value="0">
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">确认添加</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 采购入库弹窗 -->
+<div class="modal fade" id="purchaseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">采购入库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/purchase/add">
+                    <input type="hidden" name="product_id" id="purchase_product_id">
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="purchase_product_name" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">采购数量 *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">采购单价（元）*</label>
+                        <input type="number" step="0.01" name="unit_cost" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">供应商</label>
+                        <div class="input-group">
+                            <select name="supplier_id" class="form-select">
+                                <option value="">-- 请选择 --</option>
+                                {% for s in suppliers %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addSupplierModal">+ 添加供应商</button>
+                        </div>
+                    </div>
+                    <!-- ── 新增：自定义属性输入区域 ── -->
+                    <div id="purchase_cf_input_section" style="display:none; margin-top:15px; border-top:1px solid #ddd; padding-top:15px;">
+                        <label class="form-label"><strong>📋 商品属性（该商品已设置的属性）</strong></label>
+                        <div id="purchase_cf_dynamic_inputs"></div>
+                    </div>
+                    <!-- ── 新增：序列号输入 ── -->
+                    <div class="mb-3">
+                        <label class="form-label">序列号（多个用英文逗号分隔）</label>
+                        <input type="text" name="serial_numbers" class="form-control"
+                               placeholder="例如: SN001,SN002,SN003">
+                        <small class="text-muted">如果不填则不记录序列号</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">确认入库</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── 销售出库弹窗 ── -->
+<div class="modal fade" id="salesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">销售出库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/sales/add">
+                    <!-- 隐藏字段：商品ID -->
+                    <input type="hidden" name="product_id" id="sales_product_id">
+                    <div class="mb-3">
+                        <label class="form-label">商品名称</label>
+                        <input type="text" id="sales_product_name" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">销售数量 *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">销售单价（元）</label>
+                        <input type="number" step="0.01" name="unit_price" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">客户名称</label>
+                        <input type="text" name="customer" class="form-control">
+                    </div>
+                        <!-- ── 序列号选择（有序列号时才显示）── -->
+                    <div id="sales_serial_area" class="mb-3" style="display:none;">
+                        <label class="form-label">选择序列号（可多选，不选则自动分配）</label>
+                        <div id="sales_serial_checkboxes" class="border rounded p-2" style="min-height:60px;max-height:150px;overflow-y:auto;">
+                        </div>
+                        <input type="hidden" name="serial_numbers" id="sales_serial_hidden">
+                        <small class="text-muted">未勾选时系统将自动分配库存中的序列号</small>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">确认出库</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── 添加品牌弹窗 ── -->
+<div class="modal fade" id="addBrandModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加新品牌</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/brand/add">
+                    <div class="mb-3">
+                        <label class="form-label">品牌名称 *</label>
+                        <input type="text" name="name" class="form-control" placeholder="如：金士顿、Samsung" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">添加品牌</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加供应商弹窗 -->
+<div class="modal fade" id="addSupplierModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加新供应商</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="/supplier/add">
+                    <div class="mb-3">
+                        <label class="form-label">供应商名称 *</label>
+                        <input type="text" name="name" class="form-control" placeholder="如：华为、小米" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">上级分类（可选）</label>
+                        <select name="parent_id" class="form-select">
+                            <option value="">-- 无（顶级分类） --</option>
+                            {% for s in suppliers %}
+                                {% if s.parent is none %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                    {% for child in s.children %}
+                                    <option value="{{ child.id }}">&nbsp;&nbsp;└ {{ child.name }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">添加供应商</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+
+const serialData = {{ serial_data | tojson }};
+
+// 页面加载时只创建一次 modal 实例（关键修复）
+const purchaseModalEl = document.getElementById('purchaseModal');
+const salesModalEl = document.getElementById('salesModal');
+const purchaseModal = new bootstrap.Modal(purchaseModalEl, { backdrop: true, keyboard: true });
+const salesModal = new bootstrap.Modal(salesModalEl, { backdrop: true, keyboard: true });
+
+function setPurchaseForm(id, name) {
+    document.getElementById('purchase_product_id').value = id;
+    document.getElementById('purchase_product_name').value = name;
+    document.getElementById('purchase_cf_input_section').style.display = 'none';
+    document.getElementById('purchase_cf_dynamic_inputs').innerHTML = '';
+
+    fetch(`/product/custom_fields/${id}`)
+        .then(r => r.json())
+        .then(fields => {
+            const section = document.getElementById('purchase_cf_input_section');
+            const dynamicInputs = document.getElementById('purchase_cf_dynamic_inputs');
+            const fd = (fields && typeof fields === 'object') ? fields : {};
+            if (Object.keys(fd).length > 0) {
+                section.style.display = 'block';
+                dynamicInputs.innerHTML = '';
+                for (const [k, v] of Object.entries(fd)) {
+                    dynamicInputs.innerHTML += `
+                        <div class="mb-2">
+                            <label class="form-label small">${k}</label>
+                            <input type="text" name="cf_${k}" class="form-control form-control-sm" value="${v}">
+                        </div>`;
+                }
+            }
+        })
+        .catch(() => {})
+        .finally(() => {
+            purchaseModal.show();
+        });
+}
+
+function setSalesForm(id, name) {
+    document.getElementById('sales_product_id').value = id;
+    document.getElementById('sales_product_name').value = name;
+    const serials = serialData[id] || [];
+    const area = document.getElementById('sales_serial_area');
+    const box = document.getElementById('sales_serial_checkboxes');
+    const hidden = document.getElementById('sales_serial_hidden');
+    hidden.value = '';
+    if (serials.length > 0) {
+        area.style.display = 'block';
+        box.innerHTML = '';
+        serials.forEach(function(sn) {
+            box.innerHTML += `
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input sales-sn-checkbox" type="checkbox"
+                           value="${sn}" id="sn_${id}_${sn.replace(/[^a-zA-Z0-9]/g,'_')}">
+                    <label class="form-check-label small" for="sn_${id}_${sn.replace(/[^a-zA-Z0-9]/g,'_')}">${sn}</label>
+                </div>`;
+        });
+        box.querySelectorAll('.sales-sn-checkbox').forEach(function(cb) {
+            cb.addEventListener('change', updateSalesSerialInput);
+        });
+    } else {
+        area.style.display = 'none';
+    }
+    salesModal.show();
+}
+
+function updateSalesSerialInput() {
+    const selected = [];
+    document.querySelectorAll('.sales-sn-checkbox:checked').forEach(function(cb) {
+        selected.push(cb.value);
+    });
+    document.getElementById('sales_serial_hidden').value = selected.join(',');
+}
+
+function deleteProduct(id, name) {
+    if (confirm(`确定要删除商品 "${name}" 吗？\n这将同时删除相关的采购和销售记录！`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/product/delete/${id}`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function loadTemplate() {
+    const select = document.getElementById('templateSelect');
+    const container = document.getElementById('templateFields');
+    const templateId = select.value;
+    if (!templateId) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    fetch(`/template/fields/${templateId}`)
+        .then(r => r.json())
+        .then(fields => {
+            container.style.display = 'block';
+            container.innerHTML = fields.map(f => `
+                <div class="mb-2">
+                    <label class="form-label small">${f.label}</label>
+                    <input type="text" name="cf_${f.name}" class="form-control" placeholder="${f.placeholder || ''}">
+                </div>
+            `).join('');
+        })
+        .catch(() => container.style.display = 'none');
+}
+</script>
+{% endblock %}
